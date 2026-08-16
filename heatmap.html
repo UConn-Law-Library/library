@@ -1,0 +1,2193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-19YT1QBYXV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-19YT1QBYXV');
+    </script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Record and review library occupancy across five floors, online or offline.">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Occupancy">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+    <title>Occupancy Heatmap | Dashboard</title>
+    <script>
+        (() => {
+            const allowedThemes = new Set(['dark', 'light', 'oled']);
+            let savedTheme = 'dark';
+            try { savedTheme = localStorage.getItem('occupancy-heatmap-theme') || savedTheme; } catch {}
+            const initialTheme = allowedThemes.has(savedTheme) ? savedTheme : 'dark';
+            document.documentElement.dataset.theme = initialTheme;
+            document.querySelector('meta[name="theme-color"]').content =
+                initialTheme === 'light' ? '#f1f5f9' : initialTheme === 'oled' ? '#000000' : '#0f172a';
+        })();
+    </script>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg-body: #0f172a;       /* Slate 900 */
+            --bg-panel: rgba(30, 41, 59, 0.85); /* Slate 800 with alpha */
+            --bg-element: #334155;    /* Slate 700 */
+            --bg-overlay: rgba(15, 23, 42, 0.94);
+            --bg-hover: #475569;
+            --bg-input: rgba(0, 0, 0, 0.2);
+            --bg-input-focus: rgba(0, 0, 0, 0.3);
+            --bg-subtle: rgba(255, 255, 255, 0.05);
+            --chart-grid: rgba(255, 255, 255, 0.08);
+            --primary: #3b82f6;       /* Blue 500 */
+            --primary-hover: #2563eb; /* Blue 600 */
+            --danger: #ef4444;        /* Red 500 */
+            --text-main: #f1f5f9;     /* Slate 100 */
+            --text-muted: #94a3b8;    /* Slate 400 */
+            --border: #1e293b;        /* Slate 800 */
+            --radius: 12px;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        :root[data-theme="light"] {
+            color-scheme: light;
+            --bg-body: #f1f5f9;
+            --bg-panel: rgba(255, 255, 255, 0.92);
+            --bg-element: #e2e8f0;
+            --bg-overlay: rgba(255, 255, 255, 0.96);
+            --bg-hover: #cbd5e1;
+            --bg-input: rgba(15, 23, 42, 0.06);
+            --bg-input-focus: rgba(15, 23, 42, 0.1);
+            --bg-subtle: rgba(15, 23, 42, 0.06);
+            --chart-grid: rgba(15, 23, 42, 0.12);
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --danger: #dc2626;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #cbd5e1;
+            --shadow: 0 4px 10px -2px rgba(15, 23, 42, 0.16);
+        }
+
+        :root[data-theme="oled"] {
+            color-scheme: dark;
+            --bg-body: #000;
+            --bg-panel: rgba(0, 0, 0, 0.96);
+            --bg-element: #171717;
+            --bg-overlay: rgba(0, 0, 0, 0.97);
+            --bg-hover: #262626;
+            --bg-input: #0a0a0a;
+            --bg-input-focus: #111;
+            --bg-subtle: rgba(255, 255, 255, 0.08);
+            --chart-grid: rgba(255, 255, 255, 0.12);
+            --primary: #60a5fa;
+            --primary-hover: #3b82f6;
+            --danger: #f87171;
+            --text-main: #fff;
+            --text-muted: #a3a3a3;
+            --border: #262626;
+            --shadow: none;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--bg-body);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden; /* Prevent body scroll, handle inside wrap */
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- Header --- */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            background: var(--bg-panel);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            z-index: 20;
+            gap: 1rem;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex: 1;
+            min-width: 0; /* allows flex children to shrink */
+        }
+
+        .logo-area {
+            font-weight: 700;
+            font-size: 1.1rem;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-muted);
+        }
+        
+        .stat-badge {
+            background: var(--bg-element);
+            padding: 0.25rem 0.75rem;
+            border-radius: 99px;
+            font-size: 0.9rem;
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-shrink: 0;
+        }
+
+        .sync-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            min-height: 32px;
+            padding: 0.3rem 0.65rem;
+            border: 1px solid var(--border);
+            border-radius: 99px;
+            background: var(--bg-input);
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            white-space: nowrap;
+        }
+
+        .sync-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.12);
+        }
+
+        .sync-status[data-state="saved"] .sync-dot { background: var(--primary); }
+        .sync-status[data-state="sending"] .sync-dot { background: #f59e0b; animation: pulse 1s ease-in-out infinite; }
+        .sync-status[data-state="sent"] .sync-dot { background: #10b981; }
+        .sync-status[data-state="offline"] .sync-dot,
+        .sync-status[data-state="error"] .sync-dot { background: var(--danger); }
+
+        @keyframes pulse {
+            50% { opacity: 0.35; }
+        }
+
+        .mode-switch,
+        .theme-switch {
+            display: inline-flex;
+            padding: 3px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--bg-input);
+        }
+
+        .mode-switch button,
+        .theme-switch button {
+            min-height: 38px;
+            padding: 0.4rem 0.75rem;
+            border: 0;
+            background: transparent;
+            color: var(--text-muted);
+        }
+
+        .mode-switch button.active,
+        .theme-switch button.active {
+            background: var(--primary);
+            color: #fff;
+            box-shadow: var(--shadow);
+        }
+
+        .panel .mode-switch,
+        .panel .theme-switch {
+            width: 100%;
+        }
+
+        .panel .mode-switch button,
+        .panel .theme-switch button {
+            flex: 1;
+            min-height: 44px;
+        }
+
+        body[data-mode="count"] .analyze-only,
+        body[data-mode="analyze"] .count-only {
+            display: none !important;
+        }
+
+        /* --- Scrollable Tabs --- */
+        .tabs-container {
+            flex: 1;
+            overflow-x: auto;
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none;  /* IE */
+            mask-image: linear-gradient(to right, transparent, black 10px, black 90%, transparent);
+            -webkit-mask-image: linear-gradient(to right, transparent, black 10px, black 90%, transparent);
+        }
+        .tabs-container::-webkit-scrollbar { display: none; }
+
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0 10px;
+        }
+
+        .tab {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid transparent;
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tab:hover {
+            background: var(--bg-subtle);
+            color: var(--text-main);
+        }
+
+        .tab.active {
+            background: var(--bg-element);
+            color: var(--primary);
+            border-color: var(--border);
+            box-shadow: var(--shadow);
+        }
+
+        .tab .badge {
+            background: var(--bg-input-focus);
+            font-size: 0.75rem;
+            padding: 0.1rem 0.4rem;
+            border-radius: 99px;
+            color: var(--text-muted);
+        }
+        .tab.active .badge {
+            background: var(--primary);
+            color: white;
+        }
+
+        /* --- Main Canvas Area --- */
+        #wrap {
+            position: relative;
+            flex: 1;
+            background-image: radial-gradient(var(--bg-element) 1px, transparent 1px);
+            background-size: 20px 20px; /* Grid pattern effect */
+            overflow: hidden;
+            touch-action: none;
+            cursor: crosshair;
+        }
+
+        body[data-mode="analyze"] #wrap,
+        #wrap.is-panning {
+            cursor: grab;
+        }
+
+        #wrap.is-panning {
+            cursor: grabbing;
+        }
+
+        #floor, #heat {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: block;
+        }
+        #heat { pointer-events: none; }
+
+        .map-controls {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.3rem;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--bg-overlay);
+            backdrop-filter: blur(8px);
+            box-shadow: var(--shadow);
+        }
+
+        .map-controls button {
+            min-width: 44px;
+            min-height: 44px;
+            padding: 0.45rem 0.65rem;
+        }
+
+        .zoom-readout {
+            min-width: 48px;
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            font-variant-numeric: tabular-nums;
+            text-align: center;
+        }
+
+        .undo-toast {
+            position: absolute;
+            left: 50%;
+            bottom: 0.75rem;
+            z-index: 12;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            min-width: min(360px, calc(100% - 2rem));
+            padding: 0.55rem 0.65rem 0.55rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg-overlay);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
+            color: var(--text-main);
+        }
+
+        .undo-toast[hidden] { display: none; }
+        .undo-toast span { flex: 1; font-size: 0.88rem; }
+        .undo-toast button { min-width: 64px; }
+
+        /* --- Footer / Controls --- */
+        footer {
+            background: var(--bg-panel);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid var(--border);
+            padding: 0.75rem 1rem;
+            display: grid;
+            grid-template-columns: auto 1fr auto; /* Tools | Notes | Submit */
+            gap: 1rem;
+            align-items: center;
+            z-index: 20;
+        }
+        footer[hidden] { display: none; }
+
+        .toolbar-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        /* Buttons */
+        button {
+            border: 1px solid var(--border);
+            background: var(--bg-element);
+            color: var(--text-main);
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            min-height: 44px;
+        }
+
+        button:hover:not(:disabled) {
+            background: var(--bg-hover);
+        }
+        button:active:not(:disabled) {
+            transform: scale(0.97);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.icon-only {
+            padding: 0.6rem;
+            font-size: 1.2rem;
+            line-height: 1;
+            min-width: 44px;
+        }
+
+        /* Submit Button Special Styling */
+        .submitbtn {
+            background: var(--primary);
+            border-color: var(--primary-hover);
+            color: white;
+            font-weight: 600;
+            padding-left: 1.5rem;
+            padding-right: 1.5rem;
+        }
+        .submitbtn:hover:not(:disabled) {
+            background: var(--primary-hover);
+        }
+
+        /* Textarea styling */
+        .notes-wrap {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            position: relative;
+        }
+        
+        #notes {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            border-radius: 8px;
+            padding: 0.6rem;
+            font-family: inherit;
+            font-size: 0.9rem;
+            resize: none;
+            width: 100%;
+            height: 44px; /* Compact, with a tablet-sized touch target */
+            transition: height 0.2s, border-color 0.2s;
+        }
+        #notes:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: var(--bg-input-focus);
+            height: 80px; /* Expands on focus */
+            position: absolute;
+            bottom: 0;
+            z-index: 30;
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.2);
+        }
+
+        /* --- Settings Panel --- */
+        .panel {
+            position: fixed;
+            top: 70px;
+            right: 1rem;
+            width: 300px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            backdrop-filter: blur(12px);
+            z-index: 50;
+            transform-origin: top right;
+            transition: transform 0.2s, opacity 0.2s;
+            max-height: calc(100dvh - 90px);
+            overflow-y: auto;
+        }
+
+        .panel input[type="datetime-local"],
+        .panel input[type="time"] {
+            background: var(--bg-body);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 0.5rem;
+            border-radius: 4px;
+            width: 100%;
+            min-height: 44px;
+            font-family: inherit;
+        }
+
+        .dow-filter { display: flex; gap: 4px; }
+        .dow-filter button { flex: 1; padding: 0.4rem 0; font-size: 0.8rem; }
+        .dow-filter button.on {
+            background: var(--primary);
+            border-color: var(--primary-hover);
+            color: #fff;
+        }
+        
+        .panel[hidden] {
+            display: flex !important; /* Override default hidden display */
+            transform: scale(0.95);
+            opacity: 0;
+            pointer-events: none;
+            visibility: hidden;
+        }
+
+        .panel button[hidden],
+        .panel input[hidden] {
+            display: none !important;
+        }
+
+        .panel h3 {
+            margin: 0 0 0.5rem 0;
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.5rem;
+        }
+
+        .control-row {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+        .control-row label {
+            font-size: 0.85rem;
+            display: flex;
+            justify-content: space-between;
+            color: var(--text-muted);
+        }
+        
+        /* Custom Range Inputs */
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 44px;
+            background: transparent;
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            background: var(--bg-element);
+            border-radius: 3px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: var(--primary);
+            margin-top: -9px;
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+        }
+        
+        /* File Inputs */
+        input[type="file"] {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        input[type="file"]::file-selector-button {
+            border: 1px solid var(--border);
+            background: var(--bg-element);
+            color: var(--text-main);
+            border-radius: 4px;
+            padding: 0.65rem 0.75rem;
+            margin-right: 0.5rem;
+            cursor: pointer;
+        }
+
+        /* --- Playback Bar --- */
+        #playbackBar {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-panel);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid var(--border);
+            z-index: 15;
+            flex-wrap: wrap;
+        }
+        #playbackBar[hidden] { display: none; }
+        #pbSlider { flex: 1; min-width: 120px; }
+        #pbLabel {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+        #playbackBar button { padding: 0.35rem 0.6rem; font-size: 0.9rem; }
+        #pbAll.active-mode { color: var(--primary); border-color: var(--primary); }
+
+        /* --- Analytics Overlay --- */
+        .overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: var(--bg-body);
+            display: flex;
+            flex-direction: column;
+        }
+        .overlay[hidden] { display: none; }
+        .overlay-head {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-panel);
+        }
+        .overlay-head h2 { margin: 0; font-size: 1.1rem; flex: 1; white-space: nowrap; }
+        .an-muted { color: var(--text-muted); font-size: 0.85rem; }
+        .overlay-body { flex: 1; overflow-y: auto; padding: 1rem; }
+        #anContent { display: grid; gap: 1rem; }
+        #anContent[hidden] { display: none; }
+        .an-empty { color: var(--text-muted); text-align: center; padding: 3rem 1rem; }
+
+        .stat-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.75rem;
+        }
+        .stat-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 0.75rem 1rem;
+        }
+        .stat-card .k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+        .stat-card .v { font-size: 1.5rem; font-weight: 700; margin-top: 0.15rem; }
+        .stat-card .s { font-size: 0.75rem; color: var(--text-muted); }
+
+        .chart-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1rem;
+        }
+        .chart-card h3 {
+            margin: 0 0 0.75rem;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+        #anLine { display: block; }
+        .legend { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.6rem; font-size: 0.8rem; color: var(--text-muted); }
+        .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+
+        .dow-grid-wrap { overflow-x: auto; }
+        .dow-grid {
+            display: grid;
+            grid-template-columns: 38px repeat(24, minmax(16px, 1fr));
+            gap: 2px;
+            min-width: 540px;
+        }
+        .dow-cell { aspect-ratio: 1; border-radius: 3px; background: var(--bg-subtle); }
+        .dow-lbl {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .floor-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; font-size: 0.85rem; }
+        .floor-row:last-child { margin-bottom: 0; }
+        .floor-row .fl-name { width: 64px; color: var(--text-muted); flex-shrink: 0; }
+        .floor-row .fl-bar-wrap { flex: 1; background: var(--bg-subtle); border-radius: 99px; height: 14px; overflow: hidden; }
+        .floor-row .fl-bar { height: 100%; border-radius: 99px; }
+        .floor-row .fl-val { width: 120px; text-align: right; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+        /* --- Mobile Tweaks --- */
+        @media (max-width: 768px) {
+
+            header { gap: 0.5rem; padding-inline: 0.5rem; }
+            .header-left { gap: 0.5rem; }
+            .header-actions { gap: 0.4rem; }
+            .stat-badge { padding-inline: 0.5rem; }
+            .stat-label { display: none; }
+
+            .map-controls {
+                top: 0.5rem;
+                right: 0.5rem;
+            }
+            .map-controls .wide-control { display: none; }
+            footer {
+                grid-template-columns: 1fr 1fr; /* Two columns */
+                grid-template-areas: 
+                    "tools submit"
+                    "notes notes";
+            }
+            .toolbar-group { grid-area: tools; }
+            .submitbtn { grid-area: submit; width: 100%; }
+            .notes-wrap { grid-area: notes; margin-top: 0.5rem; }
+            
+            #notes:focus {
+                position: static; /* Don't pop up on mobile, keeps flow */
+                height: 60px;
+            }
+        }
+
+        /* Phone portrait: show every floor at once and prioritize notes. */
+        @media (max-width: 768px) and (orientation: portrait) {
+            header {
+                display: grid;
+                grid-template-columns: auto 1fr;
+                grid-template-areas:
+                    "menu actions"
+                    "floors floors";
+                align-items: center;
+                gap: 0.5rem;
+                padding: 0.5rem;
+            }
+
+            .header-left { display: contents; }
+            #menuBtn { grid-area: menu; }
+
+            .header-actions {
+                grid-area: actions;
+                justify-self: end;
+            }
+
+            .tabs-container {
+                grid-area: floors;
+                width: 100%;
+                overflow: visible;
+                mask-image: none;
+                -webkit-mask-image: none;
+            }
+
+            .tabs {
+                flex-direction: column;
+                gap: 0.25rem;
+                padding: 0;
+            }
+
+            .tab {
+                width: 100%;
+                min-height: 44px;
+                justify-content: space-between;
+                padding-inline: 0.9rem;
+            }
+
+            footer {
+                grid-template-areas:
+                    "notes notes"
+                    "tools submit";
+            }
+
+            .notes-wrap {
+                margin-top: 0;
+                margin-bottom: 0.25rem;
+            }
+        }
+    </style>
+</head>
+
+<body data-mode="count">
+    <header>
+        <div class="header-left">
+            <button id="menuBtn" type="button" class="icon-only" aria-label="Menu" aria-expanded="false" aria-controls="controlsPanel">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12h18M3 6h18M3 18h18"/></svg>
+            </button>
+            
+            <div class="tabs-container">
+                <div class="tabs" id="tabs"></div>
+            </div>
+        </div>
+
+        <div class="header-actions">
+            <div id="syncStatus" class="sync-status" data-state="ready" role="status" aria-live="polite">
+                <span class="sync-dot" aria-hidden="true"></span>
+                <span id="syncStatusText">Ready</span>
+            </div>
+            <div class="stat-badge">
+                <span id="totalLabel" class="stat-label">Current count:</span>
+                <strong id="totalCount" style="color: var(--primary); margin-left:4px;">0</strong>
+            </div>
+        </div>
+    </header>
+
+    <div id="wrap">
+        <canvas id="floor"></canvas>
+        <canvas id="heat"></canvas>
+        <div class="map-controls" aria-label="Map view controls">
+            <button id="zoomOut" type="button" class="icon-only" aria-label="Zoom out" title="Zoom out">−</button>
+            <span id="zoomReadout" class="zoom-readout" aria-live="polite">Fit</span>
+            <button id="zoomIn" type="button" class="icon-only" aria-label="Zoom in" title="Zoom in">+</button>
+            <button id="zoomFit" type="button" class="wide-control" title="Fit the whole floor plan">Fit floor</button>
+            <button id="zoomActual" type="button" class="wide-control" title="Show one image pixel per screen pixel">100%</button>
+        </div>
+        <div id="clearToast" class="undo-toast" role="status" aria-live="polite" hidden>
+            <span id="clearToastText">Floor cleared.</span>
+            <button id="restoreClear" type="button">Undo clear</button>
+        </div>
+    </div>
+
+    <div id="playbackBar" hidden>
+        <button id="pbPrev" class="icon-only" title="Previous session">⏮</button>
+        <button id="pbPlay" class="icon-only" title="Play through sessions">▶</button>
+        <button id="pbNext" class="icon-only" title="Next session">⏭</button>
+        <input id="pbSlider" type="range" min="0" max="0" value="0" aria-label="Session scrubber">
+        <span id="pbLabel"></span>
+        <button id="pbAll" class="active-mode" title="Show all sessions aggregated">Σ All</button>
+    </div>
+
+    <footer class="count-only">
+        <div class="toolbar-group">
+            <button id="undo" disabled title="Undo last point">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+                Undo
+            </button>
+            <button id="clear" disabled title="Clear points on this floor">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                Clear
+            </button>
+        </div>
+
+        <div class="notes-wrap">
+            <textarea id="notes" placeholder="Add optional notes here..."></textarea>
+        </div>
+
+        <button id="submit" class="submitbtn">Submit</button>
+    </footer>
+
+    <div id="controlsPanel" class="panel" hidden>
+        <div class="control-row">
+            <label>Workspace</label>
+            <div class="mode-switch" role="group" aria-label="Workspace mode">
+                <button id="countMode" type="button" class="active" aria-pressed="true">Count</button>
+                <button id="analyzeMode" type="button" aria-pressed="false">Analyze</button>
+            </div>
+        </div>
+
+        <div class="control-row">
+            <label>Appearance</label>
+            <div class="theme-switch" role="group" aria-label="Appearance theme">
+                <button id="themeDark" type="button" aria-pressed="false">Dark</button>
+                <button id="themeLight" type="button" aria-pressed="false">Light</button>
+                <button id="themeOled" type="button" aria-pressed="false">OLED</button>
+            </div>
+        </div>
+
+        <div class="control-row analyze-only">
+            <button id="analyticsBtn" type="button" hidden style="width:100%; border-color:var(--primary); color:var(--primary);">📊 Open Trend Analytics</button>
+        </div>
+
+        <h3>Visualization</h3>
+        <div class="control-row">
+            <label>Radius <span id="val-radius">50</span></label>
+            <input id="radius" type="range" min="8" max="80" value="50" oninput="document.getElementById('val-radius').innerText=this.value">
+        </div>
+        <div class="control-row">
+            <label>Intensity <span id="val-inten">150</span></label>
+            <input id="intensity" type="range" min="5" max="200" value="150" oninput="document.getElementById('val-inten').innerText=this.value">
+        </div>
+        <div class="control-row">
+            <label>Opacity <span id="val-opac">80%</span></label>
+            <input id="opacity" type="range" min="10" max="100" value="80" oninput="document.getElementById('val-opac').innerText=this.value+'%'">
+        </div>
+        <div class="control-row">
+            <label>Blur <span id="val-blur">8px</span></label>
+            <input id="blur" type="range" min="0" max="30" value="8" oninput="document.getElementById('val-blur').innerText=this.value+'px'">
+        </div>
+
+        <h3 class="count-only">Current Count</h3>
+        <div class="control-row count-only">
+            <button id="resetAll" style="width:100%; border-color:var(--danger); color:var(--danger);">Reset All Floors</button>
+        </div>
+        
+        <h3 class="analyze-only">Load History</h3>
+        <div class="control-row analyze-only">
+            <button id="loadFolder" style="width:100%;">📂 Load OneDrive folder…</button>
+            <button id="rescanFolder" style="width:100%;" hidden>🔄 Rescan “<span id="folderName"></span>”</button>
+            <button id="clearSessions" style="width:100%;" hidden>Clear loaded sessions</button>
+            <div id="loadStatus" style="font-size:0.8rem; color:var(--text-muted);"></div>
+            <input id="loadFolderFallback" type="file" webkitdirectory multiple hidden>
+        </div>
+        <div class="control-row analyze-only">
+            <label>Single JSON</label>
+            <input id="loadJSON" type="file" accept="application/json">
+        </div>
+        <div class="control-row analyze-only">
+            <label>Multiple JSONs</label>
+            <input id="loadMany" type="file" accept="application/json" multiple>
+        </div>
+        
+        <h3 class="analyze-only">Filters</h3>
+        <div class="control-row analyze-only">
+            <label>Date Start</label>
+            <input id="from" type="datetime-local">
+        </div>
+        <div class="control-row analyze-only">
+            <label>Date End</label>
+            <input id="to" type="datetime-local">
+        </div>
+        <div class="control-row analyze-only">
+            <label>Time of Day (start – end)</label>
+            <div style="display:flex; gap:0.5rem;">
+                <input id="todFrom" type="time" aria-label="Time of day start">
+                <input id="todTo" type="time" aria-label="Time of day end">
+            </div>
+        </div>
+        <div class="control-row analyze-only">
+            <label>Days of Week <span style="text-transform:none;">(none = all)</span></label>
+            <div class="dow-filter" id="dowFilter">
+                <button type="button" data-dow="0">Su</button>
+                <button type="button" data-dow="1">Mo</button>
+                <button type="button" data-dow="2">Tu</button>
+                <button type="button" data-dow="3">We</button>
+                <button type="button" data-dow="4">Th</button>
+                <button type="button" data-dow="5">Fr</button>
+                <button type="button" data-dow="6">Sa</button>
+            </div>
+        </div>
+        <div class="control-row analyze-only">
+            <button id="clearFilters" style="width:100%;">Clear filters</button>
+        </div>
+    </div>
+
+    <div id="analyticsOverlay" class="overlay" hidden>
+        <div class="overlay-head">
+            <h2>📊 Trend Analysis</h2>
+            <span id="anRange" class="an-muted"></span>
+            <button id="anExport" title="Export session totals as CSV">⬇ CSV</button>
+            <button id="anClose" class="icon-only" aria-label="Close analytics">✕</button>
+        </div>
+        <div class="overlay-body">
+            <div id="anEmpty" class="an-empty" hidden>No sessions in the selected date range.</div>
+            <div id="anContent" hidden>
+                <div class="stat-cards" id="anStats"></div>
+                <div class="chart-card">
+                    <h3>Patron count per session</h3>
+                    <canvas id="anLine"></canvas>
+                    <div id="anLegend" class="legend"></div>
+                </div>
+                <div class="chart-card">
+                    <h3>Average count by day &amp; hour</h3>
+                    <div id="anGrid" class="dow-grid-wrap"></div>
+                </div>
+                <div class="chart-card">
+                    <h3>Points by floor</h3>
+                    <div id="anFloors"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (() => {
+            // --- Embedded floor images (replace placeholders) ------------------------
+            const EMBEDDED = {
+                '1F': 'Maps/1F.png',
+                '2F': 'Maps/2F.png',
+                '3F': 'Maps/3F.png',
+                '4F': 'Maps/4F.png',
+                '5F': 'Maps/5F.png',
+            };
+            const IMAGE_DATA_URLS = {
+                '1F': new URL('Maps/1F.png', window.location.href).href,
+                '2F': new URL('Maps/2F.png', window.location.href).href,
+                '3F': new URL('Maps/3F.png', window.location.href).href,
+                '4F': new URL('Maps/4F.png', window.location.href).href,
+                '5F': new URL('Maps/5F.png', window.location.href).href,
+            };
+
+            // --- Floors ---------------------------------------------------------------
+            const DEFAULT_FLOOR_INDEX = 2;
+            const THEMES = ['dark', 'light', 'oled'];
+            const THEME_KEY = 'occupancy-heatmap-theme';
+            const FLOORS = [
+                { id: '1F', label: '1st Floor', img: new Image(), imgSrc: null, points: [], view: { zoom: 1, panX: 0, panY: 0 } },
+                { id: '2F', label: '2nd Floor', img: new Image(), imgSrc: null, points: [], view: { zoom: 1, panX: 0, panY: 0 } },
+                { id: '3F', label: '3rd Floor', img: new Image(), imgSrc: null, points: [], view: { zoom: 1, panX: 0, panY: 0 } },
+                { id: '4F', label: '4th Floor', img: new Image(), imgSrc: null, points: [], view: { zoom: 1, panX: 0, panY: 0 } },
+                { id: '5F', label: '5th Floor', img: new Image(), imgSrc: null, points: [], view: { zoom: 1, panX: 0, panY: 0 } },
+            ];
+            let current = DEFAULT_FLOOR_INDEX;
+            let appMode = 'count';
+            let theme = THEMES.includes(document.documentElement.dataset.theme)
+                ? document.documentElement.dataset.theme
+                : 'dark';
+            let syncState = 'ready';
+            let syncResetTimer = null;
+            let clearUndo = null;
+
+            // Sessions loaded for trend review
+            const SESSIONS = []; 
+
+            // --- Elements -------------------------------------------------------------
+            const wrap = document.getElementById('wrap');
+            const floor = document.getElementById('floor');
+            const heat = document.getElementById('heat');
+            const fctx = floor.getContext('2d');
+            const hctx = heat.getContext('2d');
+            const undoBtn = document.getElementById('undo');
+            const clearBtn = document.getElementById('clear');
+            const resetAll = document.getElementById('resetAll');
+            const submitBtn = document.getElementById('submit');
+            const syncStatusEl = document.getElementById('syncStatus');
+            const syncStatusTextEl = document.getElementById('syncStatusText');
+            const clearToastEl = document.getElementById('clearToast');
+            const clearToastTextEl = document.getElementById('clearToastText');
+            const restoreClearBtn = document.getElementById('restoreClear');
+            const radiusEl = document.getElementById('radius');
+            const intenEl = document.getElementById('intensity');
+            const opacEl = document.getElementById('opacity');
+            const blurEl = document.getElementById('blur');
+            const loadJSON = document.getElementById('loadJSON');
+            const loadMany = document.getElementById('loadMany');
+            const fromEl = document.getElementById('from');
+            const toEl = document.getElementById('to');
+            const notesEl = document.getElementById('notes');
+            const countModeBtn = document.getElementById('countMode');
+            const analyzeModeBtn = document.getElementById('analyzeMode');
+            const themeDarkBtn = document.getElementById('themeDark');
+            const themeLightBtn = document.getElementById('themeLight');
+            const themeOledBtn = document.getElementById('themeOled');
+            const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+            const totalLabelEl = document.getElementById('totalLabel');
+            const zoomOutBtn = document.getElementById('zoomOut');
+            const zoomInBtn = document.getElementById('zoomIn');
+            const zoomFitBtn = document.getElementById('zoomFit');
+            const zoomActualBtn = document.getElementById('zoomActual');
+            const zoomReadoutEl = document.getElementById('zoomReadout');
+            const DRAFT_KEY = 'multi-floor-heatmap-embedded';
+            const FLOW_URL = "https://default17f1a87e2a254eaab9df9d439034b0.80.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/8a4d2abd61de4fceb5cb6d2a4b2b31a8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=EhX0b_ECMsXs08oSiwPJKO3H5KMRI3O0l3V1lLtdM6Q";
+
+            function setTheme(nextTheme, persist = true) {
+                if (!THEMES.includes(nextTheme)) return;
+                theme = nextTheme;
+                document.documentElement.dataset.theme = theme;
+                themeColorMeta?.setAttribute('content', theme === 'light' ? '#f1f5f9' : theme === 'oled' ? '#000000' : '#0f172a');
+                [
+                    [themeDarkBtn, 'dark'],
+                    [themeLightBtn, 'light'],
+                    [themeOledBtn, 'oled'],
+                ].forEach(([button, value]) => {
+                    const active = theme === value;
+                    button.classList.toggle('active', active);
+                    button.setAttribute('aria-pressed', String(active));
+                });
+                if (persist) {
+                    try { localStorage.setItem(THEME_KEY, theme); } catch {}
+                }
+                redraw();
+                if (!document.getElementById('analyticsOverlay').hasAttribute('hidden')) renderAnalytics();
+            }
+
+            themeDarkBtn.onclick = () => setTheme('dark');
+            themeLightBtn.onclick = () => setTheme('light');
+            themeOledBtn.onclick = () => setTheme('oled');
+
+            // Tabs with counters
+            const tabs = document.getElementById('tabs');
+            FLOORS.forEach((fl, i) => {
+                const b = document.createElement('button');
+                b.className = 'tab' + (i === current ? ' active' : '');
+                // Using div to allow flex styling
+                b.innerHTML = `<span>${fl.label}</span> <span class="badge" id="count-${fl.id}">0</span>`;
+                b.onclick = () => { current = i; updateTabs(); fitCanvas(); redraw(); };
+                tabs.appendChild(b);
+            });
+            function updateTabs() {
+                tabs.querySelectorAll('.tab').forEach((el, idx) => {
+                    el.classList.toggle('active', idx === current);
+                    // scroll into view if needed
+                    if (idx === current) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                    }
+                });
+            }
+
+            function setMode(mode) {
+                if (mode !== 'count' && mode !== 'analyze') return;
+                appMode = mode;
+                document.body.dataset.mode = mode;
+                countModeBtn.classList.toggle('active', mode === 'count');
+                analyzeModeBtn.classList.toggle('active', mode === 'analyze');
+                countModeBtn.setAttribute('aria-pressed', String(mode === 'count'));
+                analyzeModeBtn.setAttribute('aria-pressed', String(mode === 'analyze'));
+                if (mode === 'count') stopTimer();
+                if (mode === 'analyze') dismissClearUndo();
+                updatePlaybackUI();
+                redraw();
+            }
+
+            countModeBtn.onclick = () => setMode('count');
+            analyzeModeBtn.onclick = () => setMode('analyze');
+
+            // Preload embedded images
+            FLOORS.forEach(fl => {
+                if (EMBEDDED[fl.id]) {
+                    fl.imgSrc = EMBEDDED[fl.id];
+                    fl.img.src = EMBEDDED[fl.id];
+                }
+                fl.img.onload = () => { if (FLOORS[current] === fl) { fitCanvas(); redraw(); } persist(); };
+            });
+
+            // Resize handling
+            window.addEventListener('resize', () => { fitCanvas(); redraw(); });
+
+            // Map gestures: a stationary single-pointer release adds a point in
+            // Count mode. Dragging pans; two pointers pan and pinch in either mode.
+            const activePointers = new Map();
+            const TAP_SLOP = 8;
+            let pinchGesture = null;
+
+            function pointerPosition(e) {
+                const rect = floor.getBoundingClientRect();
+                return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+            }
+
+            function startPinch() {
+                const [a, b] = [...activePointers.values()];
+                if (!a || !b) return;
+                const center = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+                const distance = Math.hypot(b.x - a.x, b.y - a.y);
+                const view = FLOORS[current].view;
+                pinchGesture = {
+                    distance: Math.max(1, distance),
+                    zoom: view.zoom,
+                    localX: (center.x - floor.width / 2 - view.panX) / view.zoom,
+                    localY: (center.y - floor.height / 2 - view.panY) / view.zoom,
+                };
+                activePointers.forEach(p => { p.cancelTap = true; });
+            }
+
+            function addPointAt(clientX, clientY) {
+                const fl = FLOORS[current];
+                if (appMode !== 'count' || !fl.img.naturalWidth) return;
+                const rect = floor.getBoundingClientRect();
+                const px = clientX - rect.left, py = clientY - rect.top;
+
+                const fit = currentImageRect();
+                if (px < fit.x || px > fit.x + fit.w || py < fit.y || py > fit.y + fit.h) return;
+
+                const x = (px - fit.x) * (fl.img.naturalWidth / fit.w);
+                const y = (py - fit.y) * (fl.img.naturalHeight / fit.h);
+
+                fl.points.push({ x, y, t: Date.now() });
+                persist(); redraw();
+            }
+
+            wrap.addEventListener('pointerdown', e => {
+                if (e.target.closest('.map-controls, .undo-toast')) return;
+                if (e.pointerType === 'mouse' && e.button !== 0) return;
+                const pos = pointerPosition(e);
+                activePointers.set(e.pointerId, {
+                    ...pos,
+                    startX: pos.x,
+                    startY: pos.y,
+                    lastX: pos.x,
+                    lastY: pos.y,
+                    moved: false,
+                    cancelTap: false,
+                    clientX: e.clientX,
+                    clientY: e.clientY,
+                });
+                wrap.setPointerCapture(e.pointerId);
+                if (activePointers.size >= 2) startPinch();
+            });
+
+            wrap.addEventListener('pointermove', e => {
+                const pointer = activePointers.get(e.pointerId);
+                if (!pointer) return;
+                const pos = pointerPosition(e);
+                const dx = pos.x - pointer.lastX;
+                const dy = pos.y - pointer.lastY;
+                pointer.x = pos.x;
+                pointer.y = pos.y;
+                pointer.clientX = e.clientX;
+                pointer.clientY = e.clientY;
+                pointer.lastX = pos.x;
+                pointer.lastY = pos.y;
+
+                if (Math.hypot(pos.x - pointer.startX, pos.y - pointer.startY) > TAP_SLOP) {
+                    pointer.moved = true;
+                }
+
+                if (activePointers.size >= 2) {
+                    if (!pinchGesture) startPinch();
+                    const [a, b] = [...activePointers.values()];
+                    const center = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+                    const distance = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y));
+                    const view = FLOORS[current].view;
+                    view.zoom = clampZoom(pinchGesture.zoom * distance / pinchGesture.distance);
+                    view.panX = center.x - floor.width / 2 - pinchGesture.localX * view.zoom;
+                    view.panY = center.y - floor.height / 2 - pinchGesture.localY * view.zoom;
+                    clampView();
+                    wrap.classList.add('is-panning');
+                    redraw();
+                    e.preventDefault();
+                    return;
+                }
+
+                if (pointer.moved && FLOORS[current].view.zoom > 1) {
+                    const view = FLOORS[current].view;
+                    view.panX += dx;
+                    view.panY += dy;
+                    clampView();
+                    wrap.classList.add('is-panning');
+                    redraw();
+                    e.preventDefault();
+                }
+            });
+
+            function finishPointer(e, cancelled = false) {
+                const pointer = activePointers.get(e.pointerId);
+                if (!pointer) return;
+                const wasOnlyPointer = activePointers.size === 1;
+                activePointers.delete(e.pointerId);
+
+                if (!cancelled && wasOnlyPointer && !pointer.moved && !pointer.cancelTap) {
+                    addPointAt(pointer.clientX, pointer.clientY);
+                }
+
+                if (activePointers.size === 1) {
+                    const remaining = [...activePointers.values()][0];
+                    remaining.startX = remaining.lastX = remaining.x;
+                    remaining.startY = remaining.lastY = remaining.y;
+                    remaining.moved = false;
+                    remaining.cancelTap = true;
+                }
+                pinchGesture = null;
+                if (activePointers.size === 0) wrap.classList.remove('is-panning');
+            }
+
+            wrap.addEventListener('pointerup', e => finishPointer(e));
+            wrap.addEventListener('pointercancel', e => finishPointer(e, true));
+
+            wrap.addEventListener('wheel', e => {
+                if (e.target.closest('.map-controls')) return;
+                const pos = pointerPosition(e);
+                zoomAt(FLOORS[current].view.zoom * Math.exp(-e.deltaY * 0.0015), pos.x, pos.y);
+                e.preventDefault();
+            }, { passive: false });
+
+            function dismissClearUndo() {
+                if (clearUndo?.timer) clearTimeout(clearUndo.timer);
+                clearUndo = null;
+                clearToastEl.hidden = true;
+            }
+
+            function showClearUndo(floorIndex, points) {
+                dismissClearUndo();
+                const state = { floorIndex, points, timer: null };
+                clearUndo = state;
+                clearToastTextEl.textContent = `${FLOORS[floorIndex].label} cleared.`;
+                clearToastEl.hidden = false;
+                state.timer = setTimeout(() => {
+                    if (clearUndo === state) dismissClearUndo();
+                }, 7000);
+            }
+
+            undoBtn.onclick = () => { FLOORS[current].points.pop(); persist(); redraw(); };
+            clearBtn.onclick = () => {
+                const points = FLOORS[current].points;
+                if (!points.length) return;
+                showClearUndo(current, points.map(point => ({ ...point })));
+                FLOORS[current].points = [];
+                persist();
+                redraw();
+            };
+
+            restoreClearBtn.onclick = () => {
+                if (!clearUndo) return;
+                const { floorIndex, points } = clearUndo;
+                FLOORS[floorIndex].points = [...points, ...FLOORS[floorIndex].points];
+                dismissClearUndo();
+                persist();
+                redraw();
+            };
+
+            resetAll.onclick = () => {
+                if(confirm("Are you sure you want to clear all data from ALL floors?")) {
+                    dismissClearUndo();
+                    FLOORS.forEach(fl => fl.points = []);
+                    persist(); redraw();
+                }
+            };
+
+            function hasDraft() {
+                return computeTotalCount() > 0 || Boolean(notesEl.value.trim());
+            }
+
+            function updateSyncStatus() {
+                let state = syncState;
+                let text = 'Ready';
+
+                if (!navigator.onLine && state !== 'sending') {
+                    state = 'offline';
+                    text = hasDraft() ? 'Offline · draft saved' : 'Offline';
+                } else if (state === 'sending') {
+                    text = 'Sending…';
+                } else if (state === 'sent') {
+                    text = 'Submitted';
+                } else if (state === 'error') {
+                    text = 'Send failed · draft saved';
+                } else if (hasDraft()) {
+                    state = 'saved';
+                    text = 'Draft saved';
+                } else {
+                    state = 'ready';
+                }
+
+                syncStatusEl.dataset.state = state;
+                syncStatusTextEl.textContent = text;
+            }
+
+            function setSyncState(state, resetAfter = 0) {
+                clearTimeout(syncResetTimer);
+                syncState = state;
+                updateSyncStatus();
+                if (resetAfter) {
+                    syncResetTimer = setTimeout(() => {
+                        syncState = 'ready';
+                        updateSyncStatus();
+                    }, resetAfter);
+                }
+            }
+
+            async function sendToFlow(payload) {
+                const r = await fetch(FLOW_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                if (!r.ok) throw new Error(`${r.status} ${await r.text().catch(() => "")}`);
+                return r; 
+            }
+
+            submitBtn.onclick = async () => {
+                if (!navigator.onLine) {
+                    updateSyncStatus();
+                    return;
+                }
+
+                const payload = {
+                    submitted_at: new Date().toISOString(),
+                    note: (notesEl?.value || "").trim(),
+                    floors: FLOORS.map(fl => ({
+                        id: fl.id,
+                        image_data_url: fl.img.naturalWidth ? IMAGE_DATA_URLS[fl.id] : null,
+                        image_size: fl.img.naturalWidth ? { w: fl.img.naturalWidth, h: fl.img.naturalHeight } : null,
+                        points: fl.points
+                    })),
+                    TotalCount: computeTotalCount()
+                };
+
+                submitBtn.disabled = true;
+                setSyncState('sending');
+
+                try {
+                    await sendToFlow(payload);
+                    dismissClearUndo();
+                    FLOORS.forEach(fl => fl.points = []);
+                    notesEl.value = "";
+                    persist();
+                    redraw();
+                    setSyncState('sent', 2500);
+
+                    submitBtn.style.background = "#10b981";
+                    setTimeout(() => {
+                        submitBtn.style.background = "";
+                        submitBtn.disabled = false;
+                    }, 2000);
+                } catch (e) {
+                    setSyncState('error');
+                    alert(`Flow error: ${e.message}`);
+                    submitBtn.disabled = false;
+                }
+            };
+
+            // Load a single JSON
+            loadJSON.onchange = e => {
+                const [f] = e.target.files || [];
+                if (f) loadFiles([f]);
+                e.target.value = '';
+            };
+
+            // Load many JSONs (manual multi-select)
+            loadMany.onchange = e => {
+                const files = Array.from(e.target.files || []);
+                if (files.length) loadFiles(files);
+                e.target.value = '';
+            };
+            
+            // Listeners for sliders that trigger redraw
+            [radiusEl, intenEl, opacEl, blurEl].forEach(el => el.addEventListener('input', redraw));
+            [fromEl, toEl].forEach(el => el.addEventListener('input', redraw));
+            notesEl.addEventListener('input', persist);
+            window.addEventListener('online', updateSyncStatus);
+            window.addEventListener('offline', updateSyncStatus);
+
+            // --- Helpers --------------------------------------------------------------
+            function computeTotalCount() {
+                return FLOORS.reduce((total, fl) => total + fl.points.length, 0);
+            }
+
+            function fitCanvas() {
+                const rect = wrap.getBoundingClientRect();
+                floor.width = Math.max(1, Math.floor(rect.width));
+                floor.height = Math.max(1, Math.floor(rect.height));
+                heat.width = floor.width; heat.height = floor.height;
+                fctx.imageSmoothingEnabled = true;
+                fctx.imageSmoothingQuality = 'high';
+                clampView();
+                updateZoomControls();
+            }
+
+            function imageFitRect(iw, ih, cw, ch) {
+                if (!iw || !ih || !cw || !ch) return { x: 0, y: 0, w: cw, h: ch };
+                const s = Math.min(cw / iw, ch / ih);
+                const w = Math.floor(iw * s), h = Math.floor(ih * s);
+                const x = Math.floor((cw - w) / 2), y = Math.floor((ch - h) / 2);
+                return { x, y, w, h };
+            }
+
+            const MIN_ZOOM = 1;
+            const MAX_ZOOM = 8;
+
+            function clampZoom(zoom) {
+                return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
+            }
+
+            function currentImageRect() {
+                const fl = FLOORS[current];
+                const base = imageFitRect(fl.img.naturalWidth, fl.img.naturalHeight, floor.width, floor.height);
+                const view = fl.view;
+                const w = base.w * view.zoom;
+                const h = base.h * view.zoom;
+                return {
+                    x: (floor.width - w) / 2 + view.panX,
+                    y: (floor.height - h) / 2 + view.panY,
+                    w,
+                    h,
+                };
+            }
+
+            function clampView() {
+                const fl = FLOORS[current];
+                const view = fl.view;
+                view.zoom = clampZoom(view.zoom);
+                if (!fl.img.naturalWidth) return;
+                const base = imageFitRect(fl.img.naturalWidth, fl.img.naturalHeight, floor.width, floor.height);
+                const maxX = Math.max(0, (base.w * view.zoom - floor.width) / 2);
+                const maxY = Math.max(0, (base.h * view.zoom - floor.height) / 2);
+                view.panX = Math.max(-maxX, Math.min(maxX, view.panX));
+                view.panY = Math.max(-maxY, Math.min(maxY, view.panY));
+            }
+
+            function zoomAt(nextZoom, screenX = floor.width / 2, screenY = floor.height / 2) {
+                const view = FLOORS[current].view;
+                const oldZoom = view.zoom;
+                nextZoom = clampZoom(nextZoom);
+                const localX = (screenX - floor.width / 2 - view.panX) / oldZoom;
+                const localY = (screenY - floor.height / 2 - view.panY) / oldZoom;
+                view.zoom = nextZoom;
+                view.panX = screenX - floor.width / 2 - localX * nextZoom;
+                view.panY = screenY - floor.height / 2 - localY * nextZoom;
+                clampView();
+                redraw();
+            }
+
+            function fitFloor() {
+                const view = FLOORS[current].view;
+                view.zoom = 1;
+                view.panX = 0;
+                view.panY = 0;
+                redraw();
+            }
+
+            function showActualSize() {
+                const fl = FLOORS[current];
+                if (!fl.img.naturalWidth) return;
+                const base = imageFitRect(fl.img.naturalWidth, fl.img.naturalHeight, floor.width, floor.height);
+                const baseScale = base.w / fl.img.naturalWidth;
+                zoomAt(baseScale ? 1 / baseScale : 1);
+            }
+
+            function updateZoomControls() {
+                const zoom = FLOORS[current].view.zoom;
+                zoomReadoutEl.textContent = Math.abs(zoom - 1) < 0.01 ? 'Fit' : `${Math.round(zoom * 100)}%`;
+                zoomOutBtn.disabled = zoom <= MIN_ZOOM + 0.001;
+                zoomInBtn.disabled = zoom >= MAX_ZOOM - 0.001;
+            }
+
+            zoomOutBtn.onclick = () => zoomAt(FLOORS[current].view.zoom / 1.25);
+            zoomInBtn.onclick = () => zoomAt(FLOORS[current].view.zoom * 1.25);
+            zoomFitBtn.onclick = fitFloor;
+            zoomActualBtn.onclick = showActualSize;
+
+            function displayedSessions() {
+                if (appMode !== 'analyze') return [];
+                if (playback.active) {
+                    const list = analyticsSessions();
+                    return list.length ? [list[Math.min(playback.index, list.length - 1)]] : [];
+                }
+                return analyticsSessions();
+            }
+
+            // Sessions matching all active filters (date range, time of day,
+            // days of week), sorted by time (ignores the include-sessions
+            // toggle — used by analytics, playback and CSV export)
+            function analyticsSessions() {
+                const start = fromEl.value ? new Date(fromEl.value) : new Date(-8640000000000000);
+                const end = toEl.value ? new Date(toEl.value) : new Date(8640000000000000);
+                const days = activeDows();
+                const toMins = v => { const [h, m] = v.split(':').map(Number); return h * 60 + m; };
+                const lo = todFromEl.value ? toMins(todFromEl.value) : null;
+                const hi = todToEl.value ? toMins(todToEl.value) : null;
+                return SESSIONS.filter(s => {
+                    if (s.ts < start || s.ts > end) return false;
+                    if (days.size && !days.has(s.ts.getDay())) return false;
+                    if (lo !== null || hi !== null) {
+                        const mins = s.ts.getHours() * 60 + s.ts.getMinutes();
+                        const a = lo ?? 0, b = hi ?? 1439;
+                        // a > b means the window wraps past midnight (e.g. 10 PM – 2 AM)
+                        const inWindow = a <= b ? (mins >= a && mins <= b) : (mins >= a || mins <= b);
+                        if (!inWindow) return false;
+                    }
+                    return true;
+                }).sort((a, b) => a.ts - b.ts);
+            }
+
+            function redraw() {
+                const fl = FLOORS[current];
+
+                const aggPoints = appMode === 'count' ? [...fl.points] : [];
+                for (const sess of displayedSessions()) {
+                    const sf = (sess.floors || []).find(f => f.id === fl.id);
+                    if (sf && Array.isArray(sf.points)) aggPoints.push(...sf.points);
+                }
+
+                undoBtn.disabled = appMode !== 'count' || fl.points.length === 0;
+                clearBtn.disabled = appMode !== 'count' || fl.points.length === 0;
+
+                fctx.clearRect(0, 0, floor.width, floor.height);
+                hctx.clearRect(0, 0, heat.width, heat.height);
+
+                if (!fl.img.naturalWidth) { updateCounts(); return; }
+
+                const fit = currentImageRect();
+                fctx.save();
+                fctx.filter = theme === 'oled' ? 'invert(1) hue-rotate(180deg) brightness(0.72) contrast(1.12)' : 'none';
+                fctx.drawImage(fl.img, 0, 0, fl.img.naturalWidth, fl.img.naturalHeight, fit.x, fit.y, fit.w, fit.h);
+                fctx.restore();
+
+                const down = 0.5;
+                // Keep the heat buffer viewport-sized so pinch gestures stay
+                // responsive even when the floor plan is deeply zoomed.
+                const hw = Math.max(1, (floor.width * down) | 0);
+                const hh = Math.max(1, (floor.height * down) | 0);
+                const acc = document.createElement('canvas'); acc.width = hw; acc.height = hh;
+                const actx = acc.getContext('2d', { willReadFrequently: true });
+                actx.clearRect(0, 0, hw, hh);
+                actx.globalCompositeOperation = 'lighter';
+
+                const R = +radiusEl.value, I = +intenEl.value, k = down;
+
+                const spr = makeKernelSprite(R);
+                const sR = Math.max(2, Math.round(R * k));
+                const sprScaled = document.createElement('canvas');
+                sprScaled.width = sR * 2; sprScaled.height = sR * 2;
+                sprScaled.getContext('2d').drawImage(spr, 0, 0, sprScaled.width, sprScaled.height);
+
+                const iw = fl.img.naturalWidth, ih = fl.img.naturalHeight;
+                const sx = fit.w / iw, sy = fit.h / ih;
+
+                for (const p of aggPoints) {
+                    const x = (fit.x + p.x * sx) * k;
+                    const y = (fit.y + p.y * sy) * k;
+                    actx.globalAlpha = Math.min(1, I / 100);
+                    actx.drawImage(sprScaled, x - sR, y - sR);
+                }
+
+                const imgData = actx.getImageData(0, 0, hw, hh);
+                const data = imgData.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    const a = data[i + 3] / 255;
+                    const [r, g, b] = ramp(a);
+                    data[i] = r; data[i + 1] = g; data[i + 2] = b;
+                    data[i + 3] = Math.round(255 * (+opacEl.value / 100) * Math.min(1, a * 1.5));
+                }
+                actx.putImageData(imgData, 0, 0);
+
+                const blurPx = +blurEl.value;
+                if (blurPx > 0) {
+                    const tmp = document.createElement('canvas'); tmp.width = hw; tmp.height = hh;
+                    const bctx = tmp.getContext('2d'); bctx.filter = `blur(${blurPx}px)`; bctx.drawImage(acc, 0, 0);
+                    actx.clearRect(0, 0, hw, hh); actx.drawImage(tmp, 0, 0);
+                }
+
+                hctx.drawImage(acc, 0, 0, hw, hh, 0, 0, floor.width, floor.height);
+
+                // QA markers - improved visibility
+                fctx.fillStyle = '#0f172a'; // dark center
+                fctx.strokeStyle = '#3b82f6'; // blue ring
+                fctx.lineWidth = 1.5;
+                for (const p of aggPoints) {
+                    const mx = fit.x + p.x * sx;
+                    const my = fit.y + p.y * sy;
+                    fctx.beginPath(); fctx.arc(mx, my, 3, 0, Math.PI * 2); fctx.fill(); fctx.stroke();
+                }
+
+                updateCounts();
+                updateZoomControls();
+            }
+
+            function makeKernelSprite(R) {
+                const c = document.createElement('canvas'); c.width = c.height = R * 2;
+                const ctx = c.getContext('2d');
+                const g = ctx.createRadialGradient(R, R, 0, R, R, R);
+                g.addColorStop(0, 'rgba(0,0,0,1)');
+                g.addColorStop(0.3, 'rgba(0,0,0,0.35)');
+                g.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = g; ctx.beginPath(); ctx.arc(R, R, R, 0, Math.PI * 2); ctx.fill();
+                return c;
+            }
+
+            function ramp(t) {
+                let x = Math.max(0, Math.min(1, t));
+                x = Math.pow(x, 1);
+                const G = [0, 255, 0];
+                const Y = [255, 255, 0];
+                const O = [255, 165, 0];
+                const R = [255, 0, 0];
+
+                const lerp = (a, b, p) => Math.round(a + (b - a) * p);
+                let c;
+                if (x < 0.5) {
+                    const p = x / 0.5; 
+                    c = [lerp(G[0], Y[0], p), lerp(G[1], Y[1], p), lerp(G[2], Y[2], p)];
+                } else if (x < 0.75) {
+                    const p = (x - 0.5) / 0.25;
+                    c = [lerp(Y[0], O[0], p), lerp(Y[1], O[1], p), lerp(Y[2], O[2], p)];
+                } else {
+                    const p = (x - 0.75) / 0.25;
+                    c = [lerp(O[0], R[0], p), lerp(O[1], R[1], p), lerp(O[2], R[2], p)];
+                }
+                return c;
+            }
+
+            function updateCounts() {
+                let total = 0;
+                FLOORS.forEach(fl => {
+                    let n = appMode === 'count' ? fl.points.length : 0;
+                    if (appMode === 'analyze') {
+                        for (const sess of displayedSessions()) {
+                            const sf = (sess.floors || []).find(f => f.id === fl.id);
+                            if (sf && Array.isArray(sf.points)) n += sf.points.length;
+                        }
+                    }
+                    total += n;
+                    const el = document.getElementById(`count-${fl.id}`);
+                    if (el) el.textContent = n;
+                });
+                const t = document.getElementById('totalCount');
+                if (t) t.textContent = total;
+                if (appMode === 'count') {
+                    totalLabelEl.textContent = 'Current count:';
+                } else if (!SESSIONS.length) {
+                    totalLabelEl.textContent = 'Loaded total:';
+                } else if (playback.active) {
+                    totalLabelEl.textContent = 'Session total:';
+                } else {
+                    totalLabelEl.textContent = 'Filtered total:';
+                }
+            }
+
+            function persist() {
+                const minimal = FLOORS.map(fl => ({ id: fl.id, points: fl.points }));
+                localStorage.setItem(DRAFT_KEY, JSON.stringify({
+                    floors: minimal,
+                    note: notesEl.value,
+                    updated_at: new Date().toISOString(),
+                }));
+                if (syncState !== 'sending') {
+                    clearTimeout(syncResetTimer);
+                    syncState = 'ready';
+                }
+                updateSyncStatus();
+            }
+            function restore() {
+                try {
+                    const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || "[]");
+                    const arr = Array.isArray(saved) ? saved : (saved.floors || []);
+                    arr.forEach((o, i) => { if (FLOORS[i]) FLOORS[i].points = o.points || []; });
+                    if (!Array.isArray(saved) && typeof saved.note === 'string') notesEl.value = saved.note;
+                } catch { }
+            }
+
+            function toLocalDT(d) {
+                const pad = n => String(n).padStart(2, '0');
+                return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+            }
+
+            // =================================================================
+            // Session store, folder loading & trend analysis
+            // =================================================================
+            const FLOOR_COLORS = { '1F': '#60a5fa', '2F': '#34d399', '3F': '#fbbf24', '4F': '#f87171', '5F': '#c084fc' };
+            const sessionKeys = new Set();
+            let folderHandle = null;
+
+            const loadFolderBtn = document.getElementById('loadFolder');
+            const rescanBtn = document.getElementById('rescanFolder');
+            const folderNameEl = document.getElementById('folderName');
+            const folderFallback = document.getElementById('loadFolderFallback');
+            const loadStatusEl = document.getElementById('loadStatus');
+            const clearSessionsBtn = document.getElementById('clearSessions');
+            const analyticsBtn = document.getElementById('analyticsBtn');
+            const overlay = document.getElementById('analyticsOverlay');
+            const todFromEl = document.getElementById('todFrom');
+            const todToEl = document.getElementById('todTo');
+            const dowFilterEl = document.getElementById('dowFilter');
+            const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+            const fmtDT = ts => ts.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+            const fmtD = ts => ts.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            const fmtTod = v => new Date('1970-01-01T' + v).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+            function activeDows() {
+                return new Set([...dowFilterEl.querySelectorAll('button.on')].map(b => +b.dataset.dow));
+            }
+
+            function addSession(json, fallbackKey) {
+                if (!json || !Array.isArray(json.floors)) return false;
+                const key = json.submitted_at || fallbackKey;
+                if (!key || sessionKeys.has(key)) return false;
+                sessionKeys.add(key);
+                const ts = json.submitted_at ? new Date(json.submitted_at) : new Date();
+                if (isNaN(+ts)) return false;
+                SESSIONS.push({ ts, floors: json.floors, note: json.note || '' });
+                return true;
+            }
+
+            function sessionTotals(s) {
+                const per = {}; let total = 0;
+                FLOORS.forEach(fl => {
+                    const sf = (s.floors || []).find(f => f.id === fl.id);
+                    const n = sf && Array.isArray(sf.points) ? sf.points.length : 0;
+                    per[fl.id] = n; total += n;
+                });
+                return { per, total };
+            }
+
+            function afterSessionsChanged() {
+                SESSIONS.sort((a, b) => a.ts - b.ts);
+                if (SESSIONS.length && (!fromEl.value || !toEl.value)) {
+                    fromEl.value = toLocalDT(SESSIONS[0].ts);
+                    // pad the end by a minute so the newest session isn't cut off by truncated seconds
+                    toEl.value = toLocalDT(new Date(+SESSIONS[SESSIONS.length - 1].ts + 60000));
+                }
+                analyticsBtn.hidden = SESSIONS.length === 0;
+                clearSessionsBtn.hidden = SESSIONS.length === 0;
+                updatePlaybackUI();
+                fitCanvas();
+                redraw();
+                if (!overlay.hidden) renderAnalytics();
+            }
+
+            async function loadFiles(files) {
+                let added = 0, failed = 0;
+                for (const f of files) {
+                    try {
+                        const j = JSON.parse(await f.text());
+                        if (addSession(j, f.name)) added++;
+                    } catch { failed++; }
+                }
+                loadStatusEl.textContent =
+                    `${SESSIONS.length} session${SESSIONS.length === 1 ? '' : 's'} loaded` +
+                    (added ? ` (+${added} new)` : ' (no new files)') +
+                    (failed ? ` · ${failed} unreadable` : '');
+                afterSessionsChanged();
+            }
+
+            // --- Folder access (File System Access API, synced OneDrive) ----
+            function idb() {
+                return new Promise((res, rej) => {
+                    const r = indexedDB.open('heatmap-fs', 1);
+                    r.onupgradeneeded = () => r.result.createObjectStore('handles');
+                    r.onsuccess = () => res(r.result);
+                    r.onerror = () => rej(r.error);
+                });
+            }
+            async function saveHandle(h) {
+                const db = await idb();
+                const tx = db.transaction('handles', 'readwrite');
+                tx.objectStore('handles').put(h, 'dir');
+                return new Promise(r => { tx.oncomplete = r; tx.onerror = r; });
+            }
+            async function loadHandle() {
+                try {
+                    const db = await idb();
+                    return await new Promise(r => {
+                        const rq = db.transaction('handles').objectStore('handles').get('dir');
+                        rq.onsuccess = () => r(rq.result || null);
+                        rq.onerror = () => r(null);
+                    });
+                } catch { return null; }
+            }
+
+            async function scanFolder() {
+                if (!folderHandle) return;
+                let perm = await folderHandle.queryPermission({ mode: 'read' });
+                if (perm !== 'granted') perm = await folderHandle.requestPermission({ mode: 'read' });
+                if (perm !== 'granted') { loadStatusEl.textContent = 'Folder access denied.'; return; }
+                loadStatusEl.textContent = 'Reading folder…';
+                const files = [];
+                for await (const entry of folderHandle.values()) {
+                    if (entry.kind === 'file' && /\.json$/i.test(entry.name)) files.push(await entry.getFile());
+                }
+                await loadFiles(files);
+            }
+
+            loadFolderBtn.onclick = async () => {
+                if (window.showDirectoryPicker) {
+                    try {
+                        folderHandle = await window.showDirectoryPicker({ mode: 'read' });
+                    } catch { return; /* user cancelled */ }
+                    saveHandle(folderHandle);
+                    folderNameEl.textContent = folderHandle.name;
+                    rescanBtn.hidden = false;
+                    await scanFolder();
+                } else {
+                    folderFallback.click();
+                }
+            };
+            rescanBtn.onclick = scanFolder;
+            folderFallback.onchange = e => {
+                const files = Array.from(e.target.files || []).filter(f => /\.json$/i.test(f.name));
+                if (files.length) loadFiles(files);
+                else loadStatusEl.textContent = 'No JSON files in that folder.';
+                e.target.value = '';
+            };
+
+            // Restore a previously-picked folder (rescan still needs one click,
+            // since re-granting read permission requires a user gesture)
+            loadHandle().then(h => {
+                if (h && window.showDirectoryPicker) {
+                    folderHandle = h;
+                    folderNameEl.textContent = h.name;
+                    rescanBtn.hidden = false;
+                }
+            });
+
+            clearSessionsBtn.onclick = () => {
+                SESSIONS.length = 0;
+                sessionKeys.clear();
+                stopTimer();
+                playback.active = false;
+                playback.index = 0;
+                loadStatusEl.textContent = '';
+                afterSessionsChanged();
+            };
+
+            // --- Playback (scrub through sessions on the heatmap) ------------
+            const playback = { active: false, index: 0, timer: null };
+            const playbackBar = document.getElementById('playbackBar');
+            const pbSlider = document.getElementById('pbSlider');
+            const pbPlay = document.getElementById('pbPlay');
+            const pbPrev = document.getElementById('pbPrev');
+            const pbNext = document.getElementById('pbNext');
+            const pbAll = document.getElementById('pbAll');
+            const pbLabel = document.getElementById('pbLabel');
+
+            function setPlayback(active, index) {
+                const list = analyticsSessions();
+                playback.active = active && list.length > 0;
+                playback.index = Math.max(0, Math.min(index ?? playback.index, list.length - 1));
+                if (!playback.active) stopTimer();
+                updatePlaybackUI();
+                redraw();
+            }
+            function startTimer() {
+                const list = analyticsSessions();
+                if (!list.length) return;
+                if (!playback.active || playback.index >= list.length - 1) setPlayback(true, 0);
+                playback.timer = setInterval(() => {
+                    if (playback.index >= analyticsSessions().length - 1) { stopTimer(); updatePlaybackUI(); return; }
+                    setPlayback(true, playback.index + 1);
+                }, 900);
+                pbPlay.textContent = '⏸';
+                pbPlay.title = 'Pause';
+            }
+            function stopTimer() {
+                clearInterval(playback.timer);
+                playback.timer = null;
+                pbPlay.textContent = '▶';
+                pbPlay.title = 'Play through sessions';
+            }
+            function updatePlaybackUI() {
+                const list = analyticsSessions();
+                playbackBar.hidden = appMode !== 'analyze' || SESSIONS.length === 0;
+                pbSlider.max = Math.max(0, list.length - 1);
+                pbSlider.value = Math.min(playback.index, list.length - 1);
+                pbSlider.disabled = !list.length;
+                pbAll.classList.toggle('active-mode', !playback.active);
+                if (playback.active && list.length) {
+                    const s = list[Math.min(playback.index, list.length - 1)];
+                    pbLabel.textContent = `${Math.min(playback.index, list.length - 1) + 1}/${list.length} · ${fmtDT(s.ts)} · ${sessionTotals(s).total} patrons`;
+                    pbLabel.title = s.note || '';
+                } else {
+                    pbLabel.textContent = `All ${list.length} session${list.length === 1 ? '' : 's'} (aggregate)`;
+                    pbLabel.title = '';
+                }
+            }
+            pbSlider.oninput = e => { stopTimer(); setPlayback(true, +e.target.value); };
+            pbPrev.onclick = () => { stopTimer(); setPlayback(true, playback.index - 1); };
+            pbNext.onclick = () => { stopTimer(); setPlayback(true, playback.index + 1); };
+            pbAll.onclick = () => { stopTimer(); setPlayback(false); };
+            pbPlay.onclick = () => { playback.timer ? stopTimer() : startTimer(); };
+
+            function onFilterChange() {
+                playback.index = Math.max(0, Math.min(playback.index, analyticsSessions().length - 1));
+                updatePlaybackUI();
+                redraw();
+                if (!overlay.hidden) renderAnalytics();
+            }
+            [fromEl, toEl, todFromEl, todToEl].forEach(el => el.addEventListener('input', onFilterChange));
+            dowFilterEl.querySelectorAll('button').forEach(b => {
+                b.addEventListener('click', () => { b.classList.toggle('on'); onFilterChange(); });
+            });
+            document.getElementById('clearFilters').onclick = () => {
+                todFromEl.value = '';
+                todToEl.value = '';
+                dowFilterEl.querySelectorAll('button.on').forEach(b => b.classList.remove('on'));
+                if (SESSIONS.length) {
+                    fromEl.value = toLocalDT(SESSIONS[0].ts);
+                    toEl.value = toLocalDT(new Date(+SESSIONS[SESSIONS.length - 1].ts + 60000));
+                } else {
+                    fromEl.value = '';
+                    toEl.value = '';
+                }
+                onFilterChange();
+            };
+
+            // --- Analytics overlay -------------------------------------------
+            analyticsBtn.onclick = () => {
+                setMode('analyze');
+                // close the settings menu underneath before opening the overlay
+                document.getElementById('controlsPanel').setAttribute('hidden', '');
+                document.getElementById('menuBtn').setAttribute('aria-expanded', 'false');
+                overlay.hidden = false;
+                renderAnalytics();
+            };
+            document.getElementById('anClose').onclick = () => { overlay.hidden = true; };
+            document.getElementById('anExport').onclick = exportCSV;
+            document.addEventListener('keydown', e => { if (e.key === 'Escape' && !overlay.hidden) overlay.hidden = true; });
+            window.addEventListener('resize', () => { if (!overlay.hidden) renderAnalytics(); });
+
+            function renderAnalytics() {
+                const list = analyticsSessions();
+                const empty = !list.length;
+                document.getElementById('anEmpty').hidden = !empty;
+                document.getElementById('anContent').hidden = empty;
+                const rangeEl = document.getElementById('anRange');
+                if (empty) { rangeEl.textContent = ''; return; }
+                const totals = list.map(sessionTotals);
+                const filterBits = [];
+                if (todFromEl.value || todToEl.value) {
+                    filterBits.push(`${fmtTod(todFromEl.value || '00:00')}–${fmtTod(todToEl.value || '23:59')}`);
+                }
+                const days = activeDows();
+                if (days.size) filterBits.push([...days].sort((a, b) => a - b).map(d => DAY_NAMES[d]).join(', '));
+                rangeEl.textContent = `${list.length} sessions · ${fmtDT(list[0].ts)} – ${fmtDT(list[list.length - 1].ts)}` +
+                    (filterBits.length ? ` · ${filterBits.join(' · ')}` : '');
+                renderStats(list, totals);
+                renderLineChart(list, totals);
+                renderDowGrid(list, totals);
+                renderFloorBars(totals);
+            }
+
+            function renderStats(list, totals) {
+                const grand = totals.reduce((a, t) => a + t.total, 0);
+                let peakI = 0;
+                totals.forEach((t, i) => { if (t.total > totals[peakI].total) peakI = i; });
+                document.getElementById('anStats').innerHTML = `
+                    <div class="stat-card"><div class="k">Sessions</div><div class="v">${list.length}</div></div>
+                    <div class="stat-card"><div class="k">Total patrons counted</div><div class="v">${grand.toLocaleString()}</div></div>
+                    <div class="stat-card"><div class="k">Avg per session</div><div class="v">${(grand / list.length).toFixed(1)}</div></div>
+                    <div class="stat-card"><div class="k">Peak session</div><div class="v">${totals[peakI].total}</div><div class="s">${fmtDT(list[peakI].ts)}</div></div>`;
+            }
+
+            function renderLineChart(list, totals) {
+                const canvas = document.getElementById('anLine');
+                const dpr = window.devicePixelRatio || 1;
+                const cssW = Math.max(280, canvas.parentElement.clientWidth - 32);
+                const cssH = 240;
+                canvas.style.width = cssW + 'px';
+                canvas.style.height = cssH + 'px';
+                canvas.width = cssW * dpr;
+                canvas.height = cssH * dpr;
+                const ctx = canvas.getContext('2d');
+                ctx.scale(dpr, dpr);
+                const W = cssW, H = cssH, L = 34, Rm = 12, T = 12, B = 26;
+
+                const ymax = Math.max(5, Math.ceil(Math.max(...totals.map(t => t.total)) / 5) * 5);
+                const t0 = +list[0].ts, t1 = +list[list.length - 1].ts;
+                const x = t => t1 === t0 ? L + (W - L - Rm) / 2 : L + (t - t0) / (t1 - t0) * (W - L - Rm);
+                const y = v => T + (1 - v / ymax) * (H - T - B);
+
+                ctx.font = '11px sans-serif';
+                const styles = getComputedStyle(document.documentElement);
+                ctx.strokeStyle = styles.getPropertyValue('--chart-grid').trim();
+                ctx.fillStyle = styles.getPropertyValue('--text-muted').trim();
+                ctx.textAlign = 'right';
+                for (let i = 0; i <= 4; i++) {
+                    const v = ymax * i / 4, yy = y(v);
+                    ctx.beginPath(); ctx.moveTo(L, yy); ctx.lineTo(W - Rm, yy); ctx.stroke();
+                    ctx.fillText(Math.round(v), L - 6, yy + 4);
+                }
+                ctx.textAlign = 'center';
+                const nTicks = Math.min(4, list.length);
+                const multiDay = (t1 - t0) > 3 * 864e5;
+                for (let i = 0; i < nTicks; i++) {
+                    const tt = t0 + (t1 - t0) * (nTicks === 1 ? 0.5 : i / (nTicks - 1));
+                    ctx.fillText(multiDay ? fmtD(new Date(tt)) : fmtDT(new Date(tt)), x(tt), H - 8);
+                }
+
+                FLOORS.forEach(fl => {
+                    ctx.strokeStyle = FLOOR_COLORS[fl.id];
+                    ctx.lineWidth = 1.2;
+                    ctx.globalAlpha = 0.65;
+                    ctx.beginPath();
+                    list.forEach((s, i) => {
+                        const px = x(+s.ts), py = y(totals[i].per[fl.id]);
+                        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+                    });
+                    ctx.stroke();
+                });
+                ctx.globalAlpha = 1;
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                list.forEach((s, i) => {
+                    const px = x(+s.ts), py = y(totals[i].total);
+                    i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+                });
+                ctx.stroke();
+                ctx.fillStyle = '#3b82f6';
+                list.forEach((s, i) => {
+                    ctx.beginPath(); ctx.arc(x(+s.ts), y(totals[i].total), 3, 0, Math.PI * 2); ctx.fill();
+                });
+
+                document.getElementById('anLegend').innerHTML =
+                    `<span><span class="dot" style="background:#3b82f6"></span>Total</span>` +
+                    FLOORS.map(fl => `<span><span class="dot" style="background:${FLOOR_COLORS[fl.id]}"></span>${fl.label}</span>`).join('');
+            }
+
+            function renderDowGrid(list, totals) {
+                const buckets = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => ({ sum: 0, n: 0 })));
+                list.forEach((s, i) => {
+                    const b = buckets[s.ts.getDay()][s.ts.getHours()];
+                    b.sum += totals[i].total; b.n++;
+                });
+                let maxAvg = 0;
+                buckets.forEach(row => row.forEach(b => { if (b.n) maxAvg = Math.max(maxAvg, b.sum / b.n); }));
+                const days = DAY_NAMES;
+                let html = '<div class="dow-grid"><div class="dow-lbl"></div>';
+                for (let h = 0; h < 24; h++) html += `<div class="dow-lbl">${h % 3 === 0 ? h : ''}</div>`;
+                for (let d = 0; d < 7; d++) {
+                    html += `<div class="dow-lbl">${days[d]}</div>`;
+                    for (let h = 0; h < 24; h++) {
+                        const b = buckets[d][h];
+                        if (b.n && maxAvg) {
+                            const avg = b.sum / b.n;
+                            const [r, g, bl] = ramp(avg / maxAvg);
+                            html += `<div class="dow-cell" style="background:rgba(${r},${g},${bl},0.8)" title="${days[d]} ${h}:00 — avg ${avg.toFixed(1)} (${b.n} session${b.n === 1 ? '' : 's'})"></div>`;
+                        } else {
+                            html += `<div class="dow-cell" title="${days[d]} ${h}:00 — no data"></div>`;
+                        }
+                    }
+                }
+                document.getElementById('anGrid').innerHTML = html + '</div>';
+            }
+
+            function renderFloorBars(totals) {
+                const perFloor = {};
+                FLOORS.forEach(fl => perFloor[fl.id] = 0);
+                totals.forEach(t => FLOORS.forEach(fl => { perFloor[fl.id] += t.per[fl.id]; }));
+                const grand = Object.values(perFloor).reduce((a, b) => a + b, 0);
+                document.getElementById('anFloors').innerHTML = FLOORS.map(fl => {
+                    const n = perFloor[fl.id];
+                    const pct = grand ? n / grand * 100 : 0;
+                    return `<div class="floor-row">
+                        <span class="fl-name">${fl.label}</span>
+                        <div class="fl-bar-wrap"><div class="fl-bar" style="width:${pct.toFixed(1)}%;background:${FLOOR_COLORS[fl.id]}"></div></div>
+                        <span class="fl-val">${n.toLocaleString()} (${pct.toFixed(1)}%)</span>
+                    </div>`;
+                }).join('');
+            }
+
+            function exportCSV() {
+                const list = analyticsSessions();
+                if (!list.length) return;
+                const rows = [['submitted_at', 'total', ...FLOORS.map(f => f.id), 'note']];
+                list.forEach(s => {
+                    const t = sessionTotals(s);
+                    rows.push([s.ts.toISOString(), t.total, ...FLOORS.map(f => t.per[f.id]), s.note || '']);
+                });
+                const csv = rows.map(r => r.map(v => {
+                    v = String(v);
+                    return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+                }).join(',')).join('\r\n');
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+                a.download = `heatmap-sessions-${list[0].ts.toISOString().slice(0, 10)}_${list[list.length - 1].ts.toISOString().slice(0, 10)}.csv`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+            }
+
+            // ?demo=1 generates synthetic sessions to preview the analytics tools
+            if (new URLSearchParams(location.search).get('demo')) {
+                const now = Date.now();
+                for (let i = 0; i < 60; i++) {
+                    const d = new Date(now - Math.floor(Math.random() * 14) * 864e5);
+                    d.setHours(8 + Math.floor(Math.random() * 13), Math.random() < 0.5 ? 0 : 30, i, 0);
+                    const busy = 0.4 + Math.sin((d.getHours() - 8) / 13 * Math.PI);
+                    addSession({
+                        submitted_at: d.toISOString(),
+                        note: 'demo session',
+                        floors: FLOORS.map((fl, fi) => ({
+                            id: fl.id,
+                            points: Array.from(
+                                { length: Math.max(0, Math.round((Math.random() * 14 + 4) * busy / (fi * 0.4 + 1))) },
+                                () => ({ x: 150 + Math.random() * 1500, y: 150 + Math.random() * 900, t: +d })
+                            )
+                        })),
+                    });
+                }
+                loadStatusEl.textContent = 'Demo data (?demo=1) — not real sessions';
+                afterSessionsChanged();
+            }
+
+            setTheme(theme, false);
+            restore();
+            fitCanvas();
+            redraw();
+            updateSyncStatus();
+        })();
+
+        // --- Panel Toggle Logic ---
+        const menuBtn = document.getElementById('menuBtn');
+        const controlsPanel = document.getElementById('controlsPanel');
+
+        function openPanel() { controlsPanel.removeAttribute('hidden'); menuBtn.setAttribute('aria-expanded', 'true'); }
+        function closePanel() { controlsPanel.setAttribute('hidden', ''); menuBtn.setAttribute('aria-expanded', 'false'); }
+
+        menuBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const willHide = !controlsPanel.hasAttribute('hidden');
+            controlsPanel.toggleAttribute('hidden', willHide);
+            menuBtn.setAttribute('aria-expanded', String(!willHide));
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!controlsPanel.hasAttribute('hidden') &&
+                !controlsPanel.contains(e.target) &&
+                e.target !== menuBtn) closePanel();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !controlsPanel.hasAttribute('hidden')) closePanel();
+        });
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').catch((error) => {
+                    console.warn('Service worker registration failed:', error);
+                });
+            });
+        }
+    </script>
+</body>
+</html>
